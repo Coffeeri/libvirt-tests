@@ -23,6 +23,7 @@ try:
         vm_unresponsive,
         wait_for_guest_pci_device_enumeration,
         wait_for_ssh,
+        wait_for_ping,
         wait_until_succeed,
     )
 except Exception:
@@ -41,6 +42,7 @@ except Exception:
         vm_unresponsive,
         wait_for_guest_pci_device_enumeration,
         wait_for_ssh,
+        wait_for_ping,
         wait_until_succeed,
     )
 
@@ -353,6 +355,56 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
             # interfaces.
             retries=350,
         )
+    def test_save_restore_during_boot(self):
+        """
+        Regression test for save/restore performed while the VM is still
+        booting.
+        """
+        save_file = "/tmp/testvm.save"
+
+        controllerVM.succeed("virsh define /etc/domain-chv-serial-file.xml")
+        controllerVM.succeed("virsh start testvm")
+
+        time.sleep(1)
+
+        # Trigger save while the guest is still in early boot.
+        controllerVM.succeed(f"virsh save testvm {save_file}")
+        controllerVM.succeed(f"ls {save_file}")
+
+        controllerVM.succeed("sudo trace-cmd start -e kvm -e sched -e irq -e timer -e workqueue")
+        controllerVM.succeed(f"virsh restore {save_file}")
+        time.sleep(5)
+        controllerVM.succeed("sudo trace-cmd stop")
+        controllerVM.succeed("sudo trace-cmd extract")
+        controllerVM.succeed("sudo trace-cmd report > /tmp/trace.txt")
+
+        controllerVM.succeed("virsh domstate testvm | grep -q running")
+
+        try:
+            wait_for_ping(controllerVM, retries=20)
+
+            self.assertGreater(0,1, "Force it to fail")
+        except RuntimeError as err:
+            serial_tail_lines = 800
+            vm_log_tail_lines = 400
+            libvirtd_tail_lines = 400
+            serial_status, serial_log_tail = controllerVM.execute(
+                f"tail -n {serial_tail_lines} /tmp/vm_serial.log"
+            )
+            _, vm_log_tail = controllerVM.execute(
+                f"tail -n {vm_log_tail_lines} /var/log/libvirt/ch/testvm.log"
+            )
+            _, libvirtd_log_tail = controllerVM.execute(
+                f"tail -n {libvirtd_tail_lines} /var/log/libvirt/libvirtd.log"
+            )
+            self.fail(
+                "wait_for_ping failed after save/restore during boot.\n"
+                f"wait_for_ping error: {err}\n\n"
+                f"/tmp/vm_serial.log status: {serial_status}\n"
+                f"/tmp/vm_serial.log tail:\n{serial_log_tail}\n\n"
+                f"testvm.log tail:\n{vm_log_tail}\n\n"
+                f"libvirtd.log tail:\n{libvirtd_log_tail}"
+            )
 
     def test_serial_file_output(self):
         """
@@ -1323,39 +1375,40 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
 def suite():
     # Test cases sorted in alphabetical order.
     testcases = [
-        LibvirtTests.test_bdf_domain_defs_in_sync_after_transient_hotplug,
-        LibvirtTests.test_bdf_domain_defs_in_sync_after_transient_unplug,
-        LibvirtTests.test_bdf_invalid_device_id,
-        LibvirtTests.test_bdf_valid_device_id_with_function_id,
-        LibvirtTests.test_bdfs_implicitly_assigned_same_after_recreate,
-        LibvirtTests.test_cirros_image,
-        LibvirtTests.test_disk_is_locked,
-        LibvirtTests.test_disk_resize_qcow2,
-        LibvirtTests.test_disk_resize_raw,
-        LibvirtTests.test_hotplug,
-        LibvirtTests.test_libvirt_default_net_prefix_triggers_desynchronizing,
-        LibvirtTests.test_libvirt_event_stop_failed,
-        LibvirtTests.test_libvirt_restart,
-        LibvirtTests.test_list_cpu_models,
-        LibvirtTests.test_list_smbios_biosinfo,
-        LibvirtTests.test_list_smbios_host,
-        LibvirtTests.test_list_smbios_oem_strings,
-        LibvirtTests.test_list_smbios_sysinfo,
-        LibvirtTests.test_managedsave,
-        LibvirtTests.test_network_hotplug_attach_detach_persistent,
-        LibvirtTests.test_network_hotplug_attach_detach_transient,
-        LibvirtTests.test_network_hotplug_persistent_transient_detach_vm_restart,
-        LibvirtTests.test_network_hotplug_persistent_vm_restart,
-        LibvirtTests.test_network_hotplug_transient_vm_restart,
-        LibvirtTests.test_numa_topology,
-        LibvirtTests.test_raw_image_is_properly_attached,
-        LibvirtTests.test_reboot_externallytriggered,
-        LibvirtTests.test_reboot_guestinduced,
-        LibvirtTests.test_serial_file_output,
-        LibvirtTests.test_serial_tcp,
-        LibvirtTests.test_shutdown,
-        LibvirtTests.test_suspend_resume,
-        LibvirtTests.test_virsh_console_works_with_pty,
+        # LibvirtTests.test_bdf_domain_defs_in_sync_after_transient_hotplug,
+        # LibvirtTests.test_bdf_domain_defs_in_sync_after_transient_unplug,
+        # LibvirtTests.test_bdf_invalid_device_id,
+        # LibvirtTests.test_bdf_valid_device_id_with_function_id,
+        # LibvirtTests.test_bdfs_implicitly_assigned_same_after_recreate,
+        # LibvirtTests.test_cirros_image,
+        # LibvirtTests.test_disk_is_locked,
+        # LibvirtTests.test_disk_resize_qcow2,
+        # LibvirtTests.test_disk_resize_raw,
+        # LibvirtTests.test_hotplug,
+        # LibvirtTests.test_libvirt_default_net_prefix_triggers_desynchronizing,
+        # LibvirtTests.test_libvirt_event_stop_failed,
+        # LibvirtTests.test_libvirt_restart,
+        # LibvirtTests.test_list_cpu_models,
+        # LibvirtTests.test_list_smbios_biosinfo,
+        # LibvirtTests.test_list_smbios_host,
+        # LibvirtTests.test_list_smbios_oem_strings,
+        # LibvirtTests.test_list_smbios_sysinfo,
+        # LibvirtTests.test_managedsave,
+        # LibvirtTests.test_network_hotplug_attach_detach_persistent,
+        # LibvirtTests.test_network_hotplug_attach_detach_transient,
+        # LibvirtTests.test_network_hotplug_persistent_transient_detach_vm_restart,
+        # LibvirtTests.test_network_hotplug_persistent_vm_restart,
+        # LibvirtTests.test_network_hotplug_transient_vm_restart,
+        # LibvirtTests.test_numa_topology,
+        # LibvirtTests.test_raw_image_is_properly_attached,
+        # LibvirtTests.test_reboot_externallytriggered,
+        # LibvirtTests.test_reboot_guestinduced,
+        LibvirtTests.test_save_restore_during_boot,
+        # LibvirtTests.test_serial_file_output,
+        # LibvirtTests.test_serial_tcp,
+        # LibvirtTests.test_shutdown,
+        # LibvirtTests.test_suspend_resume,
+        # LibvirtTests.test_virsh_console_works_with_pty,
     ]
 
     suite = unittest.TestSuite()

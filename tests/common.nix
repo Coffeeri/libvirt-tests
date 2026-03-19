@@ -545,6 +545,7 @@ in
     socat
     sshpass
     tcpdump
+    trace-cmd
     tshark
     tunctl
   ];
