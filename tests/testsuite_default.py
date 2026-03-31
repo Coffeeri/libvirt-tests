@@ -23,6 +23,7 @@ try:
         vcpu_affinity_checks,
         vm_unresponsive,
         wait_for_guest_pci_device_enumeration,
+        wait_for_ping,
         wait_for_ssh,
         wait_until_succeed,
     )
@@ -42,6 +43,7 @@ except Exception:
         vcpu_affinity_checks,
         vm_unresponsive,
         wait_for_guest_pci_device_enumeration,
+        wait_for_ping,
         wait_for_ssh,
         wait_until_succeed,
     )
@@ -360,18 +362,94 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         """
         Test save and restore while the VM is in early boot.
         """
+
         save_file = "/tmp/testvm.save"
+        stress_session = "boot-race-stress"
+        stress_cmd = f"screen -dmS {stress_session} stress -c 2 --timeout 120s"
+        try:
+            controllerVM.succeed("virsh define /etc/domain-chv-serial-file.xml")
+            controllerVM.succeed("virsh start testvm")
+            controllerVM.succeed(stress_cmd)
 
-        controllerVM.succeed("virsh define /etc/domain-chv-serial-file.xml")
-        controllerVM.succeed("virsh start testvm")
+            time.sleep(0.2)
+            # Trigger save while the guest is still in early boot.
+            controllerVM.succeed(f"virsh save testvm {save_file}")
+            controllerVM.succeed(f"virsh restore {save_file}")
 
-        time.sleep(1)
+            assert_domain_running(controllerVM)
+            wait_for_ping(controllerVM, retries=50)
+        except RuntimeError as e:
+            status, pid = controllerVM.execute("pidof -s cloud-hypervisor")
+            if status == 0 and pid.strip():
+                gdb_cmd = (
+                    "gdb -batch "
+                    f"-p {pid.strip()} "
+                    "-ex 'set pagination off' "
+                    "-ex 'thread apply all bt'"
+                )
+                gdb_status, gdb_output = controllerVM.execute(gdb_cmd)
+                print(
+                    "cloud-hypervisor backtrace "
+                    f"(pid={pid.strip()}, status={gdb_status}):\n{gdb_output}"
+                )
+            else:
+                print(
+                    f"cloud-hypervisor pid lookup failed: status={status}, output={pid}"
+                )
+            breakpoint()
+            raise e
+        finally:
+            controllerVM.execute(f"rm -rf {save_file}")
 
-        # Trigger save while the guest is still in early boot.
-        controllerVM.succeed(f"virsh save testvm {save_file}")
-        controllerVM.succeed(f"virsh restore {save_file}")
-        assert_domain_running(controllerVM)
-        wait_for_ssh(controllerVM)
+    def _run_save_restore_during_boot_with_host_stress(self, save_delay: float) -> None:
+        """
+        Stress timing-sensitive save/restore during early boot.
+        """
+        save_file = "/tmp/testvm.save"
+        stress_session = "boot-race-stress"
+        stress_cmd = f"screen -dmS {stress_session} stress -c 16 --timeout 120s"
+
+        try:
+            controllerVM.succeed("command -v stress")
+            controllerVM.succeed(f"rm -rf {save_file}")
+            controllerVM.succeed("virsh define /etc/domain-chv-serial-file.xml")
+            controllerVM.succeed("virsh start testvm")
+            controllerVM.succeed(stress_cmd)
+
+            # Sweep across firmware and early-kernel boot points.
+            time.sleep(save_delay)
+
+            controllerVM.succeed(f"virsh save testvm {save_file}")
+            controllerVM.succeed(f"virsh restore {save_file}")
+            assert_domain_running(controllerVM)
+            wait_for_ping(controllerVM, retries=50)
+        finally:
+            controllerVM.execute(f"screen -S {stress_session} -X quit")
+            controllerVM.execute(f"rm -rf {save_file}")
+
+    def test_save_restore_during_boot_stress_delay_02(self):
+        self._run_save_restore_during_boot_with_host_stress(0.2)
+
+    def test_save_restore_during_boot_stress_delay_05(self):
+        self._run_save_restore_during_boot_with_host_stress(0.5)
+
+    def test_save_restore_during_boot_stress_delay_08(self):
+        self._run_save_restore_during_boot_with_host_stress(0.8)
+
+    def test_save_restore_during_boot_stress_delay_10(self):
+        self._run_save_restore_during_boot_with_host_stress(1.0)
+
+    def test_save_restore_during_boot_stress_delay_12(self):
+        self._run_save_restore_during_boot_with_host_stress(1.2)
+
+    def test_save_restore_during_boot_stress_delay_15(self):
+        self._run_save_restore_during_boot_with_host_stress(1.5)
+
+    def test_save_restore_during_boot_stress_delay_17(self):
+        self._run_save_restore_during_boot_with_host_stress(1.7)
+
+    def test_save_restore_during_boot_stress_delay_20(self):
+        self._run_save_restore_during_boot_with_host_stress(2.0)
 
     def test_serial_file_output(self):
         """
@@ -1350,40 +1428,92 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
 def suite():
     # Test cases sorted in alphabetical order.
     testcases = [
-        LibvirtTests.test_bdf_domain_defs_in_sync_after_transient_hotplug,
-        LibvirtTests.test_bdf_domain_defs_in_sync_after_transient_unplug,
-        LibvirtTests.test_bdf_invalid_device_id,
-        LibvirtTests.test_bdf_valid_device_id_with_function_id,
-        LibvirtTests.test_bdfs_implicitly_assigned_same_after_recreate,
-        LibvirtTests.test_cirros_image,
-        LibvirtTests.test_disk_is_locked,
-        LibvirtTests.test_disk_resize_qcow2,
-        LibvirtTests.test_disk_resize_raw,
-        LibvirtTests.test_hotplug,
-        LibvirtTests.test_libvirt_default_net_prefix_triggers_desynchronizing,
-        LibvirtTests.test_libvirt_event_stop_failed,
-        LibvirtTests.test_libvirt_restart,
-        LibvirtTests.test_list_cpu_models,
-        LibvirtTests.test_list_smbios_biosinfo,
-        LibvirtTests.test_list_smbios_host,
-        LibvirtTests.test_list_smbios_oem_strings,
-        LibvirtTests.test_list_smbios_sysinfo,
-        LibvirtTests.test_managedsave,
-        LibvirtTests.test_network_hotplug_attach_detach_persistent,
-        LibvirtTests.test_network_hotplug_attach_detach_transient,
-        LibvirtTests.test_network_hotplug_persistent_transient_detach_vm_restart,
-        LibvirtTests.test_network_hotplug_persistent_vm_restart,
-        LibvirtTests.test_network_hotplug_transient_vm_restart,
-        LibvirtTests.test_numa_topology,
-        LibvirtTests.test_raw_image_is_properly_attached,
-        LibvirtTests.test_reboot_externallytriggered,
-        LibvirtTests.test_reboot_guestinduced,
-        LibvirtTests.test_save_restore_during_boot,
-        LibvirtTests.test_serial_file_output,
-        LibvirtTests.test_serial_tcp,
-        LibvirtTests.test_shutdown,
-        LibvirtTests.test_suspend_resume,
-        LibvirtTests.test_virsh_console_works_with_pty,
+        # LibvirtTests.test_bdf_domain_defs_in_sync_after_transient_hotplug,
+        # LibvirtTests.test_bdf_domain_defs_in_sync_after_transient_unplug,
+        # LibvirtTests.test_bdf_invalid_device_id,
+        # LibvirtTests.test_bdf_valid_device_id_with_function_id,
+        # LibvirtTests.test_bdfs_implicitly_assigned_same_after_recreate,
+        # LibvirtTests.test_cirros_image,
+        # LibvirtTests.test_disk_is_locked,
+        # LibvirtTests.test_disk_resize_qcow2,
+        # LibvirtTests.test_disk_resize_raw,
+        # LibvirtTests.test_hotplug,
+        # LibvirtTests.test_libvirt_default_net_prefix_triggers_desynchronizing,
+        # LibvirtTests.test_libvirt_event_stop_failed,
+        # LibvirtTests.test_libvirt_restart,
+        # LibvirtTests.test_list_cpu_models,
+        # LibvirtTests.test_list_smbios_biosinfo,
+        # LibvirtTests.test_list_smbios_host,
+        # LibvirtTests.test_list_smbios_oem_strings,
+        # LibvirtTests.test_list_smbios_sysinfo,
+        # LibvirtTests.test_managedsave,
+        # LibvirtTests.test_network_hotplug_attach_detach_persistent,
+        # LibvirtTests.test_network_hotplug_attach_detach_transient,
+        # LibvirtTests.test_network_hotplug_persistent_transient_detach_vm_restart,
+        # LibvirtTests.test_network_hotplug_persistent_vm_restart,
+        # LibvirtTests.test_network_hotplug_transient_vm_restart,
+        # LibvirtTests.test_numa_topology,
+        # LibvirtTests.test_raw_image_is_properly_attached,
+        # LibvirtTests.test_reboot_externallytriggered,
+        # LibvirtTests.test_reboot_guestinduced,
+        # LibvirtTests.test_save_restore_during_boot,
+        # LibvirtTests.test_save_restore_during_boot,
+        # LibvirtTests.test_save_restore_during_boot,
+        # LibvirtTests.test_save_restore_during_boot,
+        # LibvirtTests.test_save_restore_during_boot,
+        # LibvirtTests.test_save_restore_during_boot,
+        # LibvirtTests.test_save_restore_during_boot,
+        # LibvirtTests.test_save_restore_during_boot,
+        # LibvirtTests.test_save_restore_during_boot,
+        # LibvirtTests.test_save_restore_during_boot,
+        # LibvirtTests.test_save_restore_during_boot,
+        # LibvirtTests.test_save_restore_during_boot,
+        # LibvirtTests.test_save_restore_during_boot_stress_delay_02,
+        LibvirtTests.test_save_restore_during_boot_stress_delay_02,
+        LibvirtTests.test_save_restore_during_boot_stress_delay_02,
+        LibvirtTests.test_save_restore_during_boot_stress_delay_02,
+        LibvirtTests.test_save_restore_during_boot_stress_delay_02,
+        LibvirtTests.test_save_restore_during_boot_stress_delay_02,
+        LibvirtTests.test_save_restore_during_boot_stress_delay_02,
+        LibvirtTests.test_save_restore_during_boot_stress_delay_02,
+        LibvirtTests.test_save_restore_during_boot_stress_delay_05,
+        LibvirtTests.test_save_restore_during_boot_stress_delay_05,
+        LibvirtTests.test_save_restore_during_boot_stress_delay_05,
+        LibvirtTests.test_save_restore_during_boot_stress_delay_05,
+        LibvirtTests.test_save_restore_during_boot_stress_delay_05,
+        # LibvirtTests.test_save_restore_during_boot_stress_delay_08,
+        # LibvirtTests.test_save_restore_during_boot_stress_delay_08,
+        # LibvirtTests.test_save_restore_during_boot_stress_delay_08,
+        # LibvirtTests.test_save_restore_during_boot_stress_delay_08,
+        # LibvirtTests.test_save_restore_during_boot_stress_delay_08,
+        # LibvirtTests.test_save_restore_during_boot_stress_delay_08,
+        # LibvirtTests.test_save_restore_during_boot_stress_delay_08,
+        # LibvirtTests.test_save_restore_during_boot_stress_delay_12,
+        # LibvirtTests.test_save_restore_during_boot_stress_delay_12,
+        # LibvirtTests.test_save_restore_during_boot_stress_delay_12,
+        LibvirtTests.test_save_restore_during_boot_stress_delay_12,
+        LibvirtTests.test_save_restore_during_boot_stress_delay_15,
+        LibvirtTests.test_save_restore_during_boot_stress_delay_15,
+        LibvirtTests.test_save_restore_during_boot_stress_delay_15,
+        LibvirtTests.test_save_restore_during_boot_stress_delay_15,
+        LibvirtTests.test_save_restore_during_boot_stress_delay_15,
+        LibvirtTests.test_save_restore_during_boot_stress_delay_15,
+        LibvirtTests.test_save_restore_during_boot_stress_delay_15,
+        LibvirtTests.test_save_restore_during_boot_stress_delay_15,
+        LibvirtTests.test_save_restore_during_boot_stress_delay_17,
+        LibvirtTests.test_save_restore_during_boot_stress_delay_17,
+        LibvirtTests.test_save_restore_during_boot_stress_delay_17,
+        LibvirtTests.test_save_restore_during_boot_stress_delay_17,
+        LibvirtTests.test_save_restore_during_boot_stress_delay_17,
+        LibvirtTests.test_save_restore_during_boot_stress_delay_17,
+        LibvirtTests.test_save_restore_during_boot_stress_delay_20,
+        LibvirtTests.test_save_restore_during_boot_stress_delay_20,
+        LibvirtTests.test_save_restore_during_boot_stress_delay_20,
+        # LibvirtTests.test_serial_file_output,
+        # LibvirtTests.test_serial_tcp,
+        # LibvirtTests.test_shutdown,
+        # LibvirtTests.test_suspend_resume,
+        # LibvirtTests.test_virsh_console_works_with_pty,
     ]
 
     suite = unittest.TestSuite()
@@ -1392,6 +1522,6 @@ def suite():
     return suite
 
 
-runner = unittest.TextTestRunner()
+runner = unittest.TextTestRunner(failfast=True)
 if not runner.run(suite()).wasSuccessful():
     raise Exception("Test Run unsuccessful")

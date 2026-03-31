@@ -439,6 +439,15 @@ in
     environment.UBSAN_OPTIONS = "halt_on_error=1:print_stacktrace=1";
   };
 
+  systemd.services.virtchd = {
+    serviceConfig = {
+      Restart = "always";
+      RestartSec = 1;
+    };
+    startLimitIntervalSec = 0;
+    startLimitBurst = 0;
+  };
+
   nixpkgs.overlays = [
     (_final: _prev: {
       # Ensure that every access to `pkgs.libvirt` falls back to our special
@@ -470,15 +479,6 @@ in
   systemd.sockets.virtproxyd-tcp.wantedBy = [ "sockets.target" ];
   systemd.sockets.virtstoraged.wantedBy = [ "sockets.target" ];
   systemd.sockets.virtnetworkd.wantedBy = [ "sockets.target" ];
-
-  systemd.services.virtchd = {
-    serviceConfig = {
-      Restart = "always";
-      RestartSec = 1;
-    };
-    startLimitIntervalSec = 0;
-    startLimitBurst = 0;
-  };
 
   systemd.network = {
     enable = true;
@@ -592,6 +592,7 @@ in
     screen
     socat
     sshpass
+    stress
     tcpdump
     tshark
     tunctl

@@ -15,8 +15,8 @@
     libvirt.inputs.libvirt-tests.inputs.libvirt.follows = "libvirt";
     libvirt.inputs.nixpkgs.follows = "nixpkgs";
 
-    # cloud-hypervisor.url = "git+file:<path/to/cloud-hypervisor>";
-    cloud-hypervisor.url = "github:cyberus-technology/cloud-hypervisor?ref=gardenlinux";
+    cloud-hypervisor.url = "git+file:/home/lkohler/dev/cyberus-cloud-hypervisor";
+    #cloud-hypervisor.url = "github:cyberus-technology/cloud-hypervisor?ref=gardenlinux";
     cloud-hypervisor.inputs.nixpkgs.follows = "nixpkgs";
 
     edk2-src.url = "git+https://github.com/cyberus-technology/edk2?ref=gardenlinux&submodules=1";
@@ -81,10 +81,23 @@
           })
         ];
 
-        chv-ovmf = pkgs.OVMF-cloud-hypervisor.overrideAttrs (_old: {
+        ovmf-debug = pkgs.OVMF.override { debug = true; };
+
+        chv-ovmf-release = pkgs.OVMF-cloud-hypervisor.overrideAttrs (_old: {
           version = "cbs";
           src = edk2-src;
         });
+
+        chv-ovmf-debug = (
+          pkgs.OVMF-cloud-hypervisor.override {
+            OVMF = ovmf-debug;
+          }
+        ).overrideAttrs (_old: {
+          version = "cbs-debug";
+          src = edk2-src;
+        });
+
+        chv-ovmf = chv-ovmf-debug;
 
         nixos-image' =
           (pkgs.callPackage ./images/nixos-image.nix { inherit nixpkgs; }).config.system.build.isoImage;
@@ -227,6 +240,12 @@
           # Export of the overlay'ed package
           inherit (pkgs) cloud-hypervisor;
           inherit nixos-image;
+          chv-ovmf-release = pkgs.runCommand "OVMF-CLOUHDHV-release.fd" { } ''
+            cp ${chv-ovmf-release.fd}/FV/CLOUDHV.fd $out
+          '';
+          chv-ovmf-debug = pkgs.runCommand "OVMF-CLOUHDHV-debug.fd" { } ''
+            cp ${chv-ovmf-debug.fd}/FV/CLOUDHV.fd $out
+          '';
           chv-ovmf = pkgs.runCommand "OVMF-CLOUHDHV.fd" { } ''
             cp ${chv-ovmf.fd}/FV/CLOUDHV.fd $out
           '';
