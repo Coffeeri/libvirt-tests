@@ -19,7 +19,8 @@
     #cloud-hypervisor.url = "github:cyberus-technology/cloud-hypervisor?ref=gardenlinux";
     cloud-hypervisor.inputs.nixpkgs.follows = "nixpkgs";
 
-    edk2-src.url = "git+https://github.com/cyberus-technology/edk2?ref=gardenlinux&submodules=1";
+    edk2-src.url = "git+file:/home/lkohler/dev/cyberus-edk2?submodules=1";
+    # edk2-src.url = "git+https://github.com/cyberus-technology/edk2?ref=gardenlinux&submodules=1";
     edk2-src.flake = false;
 
     fcntl-tool.url = "github:phip1611/fcntl-tool";
@@ -95,6 +96,7 @@
         ).overrideAttrs (_old: {
           version = "cbs-debug";
           src = edk2-src;
+          patches = [  ]; # add custom EDK2 patches here
         });
 
         chv-ovmf = chv-ovmf-debug;

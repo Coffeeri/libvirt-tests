@@ -364,42 +364,30 @@ class LibvirtTests(LibvirtTestsBase):  # type: ignore
         """
 
         save_file = "/tmp/testvm.save"
-        stress_session = "boot-race-stress"
-        stress_cmd = f"screen -dmS {stress_session} stress -c 2 --timeout 120s"
         try:
             controllerVM.succeed("virsh define /etc/domain-chv-serial-file.xml")
             controllerVM.succeed("virsh start testvm")
-            controllerVM.succeed(stress_cmd)
 
-            time.sleep(0.2)
+            import random
+            sleep_time = random.uniform(2,5)
+            time.sleep(sleep_time)
+            print(f"Slept for {sleep_time}s")
+            # time.sleep(4)
             # Trigger save while the guest is still in early boot.
+            controllerVM.succeed("cp /tmp/vm_serial.log /tmp/vm_serial_pre_save.log || true")
             controllerVM.succeed(f"virsh save testvm {save_file}")
+            controllerVM.succeed("cp /tmp/vm_serial.log /tmp/vm_serial_post_save.log || true")
             controllerVM.succeed(f"virsh restore {save_file}")
 
             assert_domain_running(controllerVM)
             wait_for_ping(controllerVM, retries=50)
-        except RuntimeError as e:
-            status, pid = controllerVM.execute("pidof -s cloud-hypervisor")
-            if status == 0 and pid.strip():
-                gdb_cmd = (
-                    "gdb -batch "
-                    f"-p {pid.strip()} "
-                    "-ex 'set pagination off' "
-                    "-ex 'thread apply all bt'"
-                )
-                gdb_status, gdb_output = controllerVM.execute(gdb_cmd)
-                print(
-                    "cloud-hypervisor backtrace "
-                    f"(pid={pid.strip()}, status={gdb_status}):\n{gdb_output}"
-                )
-            else:
-                print(
-                    f"cloud-hypervisor pid lookup failed: status={status}, output={pid}"
-                )
+        except Exception as e:
             breakpoint()
             raise e
         finally:
+            controllerVM.succeed("cp /tmp/vm_serial.log /tmp/vm_serial_post_restore.log || true")
             controllerVM.execute(f"rm -rf {save_file}")
+            controllerVM.execute("rm -f /tmp/vm_serial_*")
 
     def _run_save_restore_during_boot_with_host_stress(self, save_delay: float) -> None:
         """
@@ -1456,31 +1444,46 @@ def suite():
         # LibvirtTests.test_raw_image_is_properly_attached,
         # LibvirtTests.test_reboot_externallytriggered,
         # LibvirtTests.test_reboot_guestinduced,
-        # LibvirtTests.test_save_restore_during_boot,
-        # LibvirtTests.test_save_restore_during_boot,
-        # LibvirtTests.test_save_restore_during_boot,
-        # LibvirtTests.test_save_restore_during_boot,
-        # LibvirtTests.test_save_restore_during_boot,
-        # LibvirtTests.test_save_restore_during_boot,
-        # LibvirtTests.test_save_restore_during_boot,
-        # LibvirtTests.test_save_restore_during_boot,
-        # LibvirtTests.test_save_restore_during_boot,
-        # LibvirtTests.test_save_restore_during_boot,
-        # LibvirtTests.test_save_restore_during_boot,
-        # LibvirtTests.test_save_restore_during_boot,
+        LibvirtTests.test_save_restore_during_boot,
+        LibvirtTests.test_save_restore_during_boot,
+        LibvirtTests.test_save_restore_during_boot,
+        LibvirtTests.test_save_restore_during_boot,
+        LibvirtTests.test_save_restore_during_boot,
+        LibvirtTests.test_save_restore_during_boot,
+        LibvirtTests.test_save_restore_during_boot,
+        LibvirtTests.test_save_restore_during_boot,
+        LibvirtTests.test_save_restore_during_boot,
+        LibvirtTests.test_save_restore_during_boot,
+        LibvirtTests.test_save_restore_during_boot,
+        LibvirtTests.test_save_restore_during_boot,
+        LibvirtTests.test_save_restore_during_boot,
+        LibvirtTests.test_save_restore_during_boot,
+        LibvirtTests.test_save_restore_during_boot,
+        LibvirtTests.test_save_restore_during_boot,
+        LibvirtTests.test_save_restore_during_boot,
+        LibvirtTests.test_save_restore_during_boot,
+        LibvirtTests.test_save_restore_during_boot,
+        LibvirtTests.test_save_restore_during_boot,
+        LibvirtTests.test_save_restore_during_boot,
+        LibvirtTests.test_save_restore_during_boot,
+        LibvirtTests.test_save_restore_during_boot,
+        LibvirtTests.test_save_restore_during_boot,
+        LibvirtTests.test_save_restore_during_boot,
+        LibvirtTests.test_save_restore_during_boot,
+        LibvirtTests.test_save_restore_during_boot,
         # LibvirtTests.test_save_restore_during_boot_stress_delay_02,
-        LibvirtTests.test_save_restore_during_boot_stress_delay_02,
-        LibvirtTests.test_save_restore_during_boot_stress_delay_02,
-        LibvirtTests.test_save_restore_during_boot_stress_delay_02,
-        LibvirtTests.test_save_restore_during_boot_stress_delay_02,
-        LibvirtTests.test_save_restore_during_boot_stress_delay_02,
-        LibvirtTests.test_save_restore_during_boot_stress_delay_02,
-        LibvirtTests.test_save_restore_during_boot_stress_delay_02,
-        LibvirtTests.test_save_restore_during_boot_stress_delay_05,
-        LibvirtTests.test_save_restore_during_boot_stress_delay_05,
-        LibvirtTests.test_save_restore_during_boot_stress_delay_05,
-        LibvirtTests.test_save_restore_during_boot_stress_delay_05,
-        LibvirtTests.test_save_restore_during_boot_stress_delay_05,
+        # LibvirtTests.test_save_restore_during_boot_stress_delay_02,
+        # LibvirtTests.test_save_restore_during_boot_stress_delay_02,
+        # LibvirtTests.test_save_restore_during_boot_stress_delay_02,
+        # LibvirtTests.test_save_restore_during_boot_stress_delay_02,
+        # LibvirtTests.test_save_restore_during_boot_stress_delay_02,
+        # LibvirtTests.test_save_restore_during_boot_stress_delay_02,
+        # LibvirtTests.test_save_restore_during_boot_stress_delay_02,
+        # LibvirtTests.test_save_restore_during_boot_stress_delay_05,
+        # LibvirtTests.test_save_restore_during_boot_stress_delay_05,
+        # LibvirtTests.test_save_restore_during_boot_stress_delay_05,
+        # LibvirtTests.test_save_restore_during_boot_stress_delay_05,
+        # LibvirtTests.test_save_restore_during_boot_stress_delay_05,
         # LibvirtTests.test_save_restore_during_boot_stress_delay_08,
         # LibvirtTests.test_save_restore_during_boot_stress_delay_08,
         # LibvirtTests.test_save_restore_during_boot_stress_delay_08,
@@ -1491,24 +1494,24 @@ def suite():
         # LibvirtTests.test_save_restore_during_boot_stress_delay_12,
         # LibvirtTests.test_save_restore_during_boot_stress_delay_12,
         # LibvirtTests.test_save_restore_during_boot_stress_delay_12,
-        LibvirtTests.test_save_restore_during_boot_stress_delay_12,
-        LibvirtTests.test_save_restore_during_boot_stress_delay_15,
-        LibvirtTests.test_save_restore_during_boot_stress_delay_15,
-        LibvirtTests.test_save_restore_during_boot_stress_delay_15,
-        LibvirtTests.test_save_restore_during_boot_stress_delay_15,
-        LibvirtTests.test_save_restore_during_boot_stress_delay_15,
-        LibvirtTests.test_save_restore_during_boot_stress_delay_15,
-        LibvirtTests.test_save_restore_during_boot_stress_delay_15,
-        LibvirtTests.test_save_restore_during_boot_stress_delay_15,
-        LibvirtTests.test_save_restore_during_boot_stress_delay_17,
-        LibvirtTests.test_save_restore_during_boot_stress_delay_17,
-        LibvirtTests.test_save_restore_during_boot_stress_delay_17,
-        LibvirtTests.test_save_restore_during_boot_stress_delay_17,
-        LibvirtTests.test_save_restore_during_boot_stress_delay_17,
-        LibvirtTests.test_save_restore_during_boot_stress_delay_17,
-        LibvirtTests.test_save_restore_during_boot_stress_delay_20,
-        LibvirtTests.test_save_restore_during_boot_stress_delay_20,
-        LibvirtTests.test_save_restore_during_boot_stress_delay_20,
+        # LibvirtTests.test_save_restore_during_boot_stress_delay_12,
+        # LibvirtTests.test_save_restore_during_boot_stress_delay_15,
+        # LibvirtTests.test_save_restore_during_boot_stress_delay_15,
+        # LibvirtTests.test_save_restore_during_boot_stress_delay_15,
+        # LibvirtTests.test_save_restore_during_boot_stress_delay_15,
+        # LibvirtTests.test_save_restore_during_boot_stress_delay_15,
+        # LibvirtTests.test_save_restore_during_boot_stress_delay_15,
+        # LibvirtTests.test_save_restore_during_boot_stress_delay_15,
+        # LibvirtTests.test_save_restore_during_boot_stress_delay_15,
+        # LibvirtTests.test_save_restore_during_boot_stress_delay_17,
+        # LibvirtTests.test_save_restore_during_boot_stress_delay_17,
+        # LibvirtTests.test_save_restore_during_boot_stress_delay_17,
+        # LibvirtTests.test_save_restore_during_boot_stress_delay_17,
+        # LibvirtTests.test_save_restore_during_boot_stress_delay_17,
+        # LibvirtTests.test_save_restore_during_boot_stress_delay_17,
+        # LibvirtTests.test_save_restore_during_boot_stress_delay_20,
+        # LibvirtTests.test_save_restore_during_boot_stress_delay_20,
+        # LibvirtTests.test_save_restore_during_boot_stress_delay_20,
         # LibvirtTests.test_serial_file_output,
         # LibvirtTests.test_serial_tcp,
         # LibvirtTests.test_shutdown,
